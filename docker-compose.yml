@@ -1,0 +1,105 @@
+ version: "3"
+
+ volumes:
+  db_vol:
+  media_vol:
+
+ services:
+
+  db:
+    container_name: db
+    image: mysql:5.7
+    # for m1
+    platform: linux/amd64
+    environment:
+       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+       - MYSQL_DATABASE=${MYSQL_DATABASE}
+       - MYSQL_USER=${MYSQL_USER}
+       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+       - db_vol:/var/lib/mysql:rw
+       - ./mysql/conf/my.cnf:/etc/mysql/my.cnf
+       - ./mysql/init:/docker-entrypoint-initdb.d/
+    restart: always
+  backend:
+    container_name: backend
+    build: ./backend
+    restart: always
+    # entrypoint: /django/entrypoint.sh
+    # command: uwsgi --ini uwsgi.ini
+    expose:
+      - "8000"
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./backend:/django
+      - ./backend/uwsgi:/tmp
+    links:
+      - db
+      - redis
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DEBUG=${DJANGO_DEBUG}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    tty: true
+    stdin_open: true
+
+  frontend:
+    container_name: frontend
+    build: ./frontend
+    environment:
+      - HOST=${VUE_HOST}
+    volumes:
+      - ./frontend:/app
+    links:
+      - backend
+    tty: true
+  nginx:
+    container_name: nginx
+    build: ./nginx
+    ports:
+      - "8000:80"
+    expose:
+      - "80"
+    volumes:
+      - ./nginx/ssl:/usr/share/nginx/ssl
+      - ./nginx/log:/var/log/nginx
+      - ./nginx/conf.d/:/etc/nginx/conf.d
+      - media_vol:/usr/share/nginx/html/media
+    links:
+      - backend
+      - frontend
+      - phpmyadmin
+    depends_on:
+      - backend
+      - frontend
+      - phpmyadmin
+    restart: always
+
+
+  phpmyadmin:
+    container_name: phpmyadmin
+    image: phpmyadmin/phpmyadmin
+    depends_on:
+      - db
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ABSOLUTE_URI: http://127.0.0.1:8000/phpmyadmin/
+
+  redis:
+    container_name: redis
+    image: redis:latest
+    volumes:
+      - ./redis:/usr/local/etc/redis
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "63799:6379"
+    expose:
+      - "6379"
+    restart: always
