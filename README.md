@@ -1,0 +1,1 @@
+# docker_nginx_mysql_vue_django_phpmyadmin_redis
